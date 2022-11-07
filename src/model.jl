@@ -52,11 +52,11 @@ function Unet(channels::Integer = 1, labels::Int = channels, depth::Integer=5)
 
   init_conv_block = channels >= 3 ? UNetConvBlock(channels, 64) : Chain(UNetConvBlock(channels, 3), UNetConvBlock(3, 64))
 
-  conv_down_blocks = tuple([i == depth ? x -> x : ConvDown(2^(5+i), 2^(5+i)) for i=1:depth]...)
+  conv_blocks = tuple([i == depth ? (x -> x) : ConvDown(2^(5+i), 2^(5+i)) for i=1:depth]...)
 
-  conv_blocks = tuple([UNetConvBlock(2^(5+i), 2^(6+min(i, depth-1))) for i=1:depth]...)
+  conv_down_blocks = tuple([UNetConvBlock(2^(5+i), 2^(6+min(i, depth-1))) for i=1:depth]...)
 
-  up_blocks = tuple([UNetUpBlock(2^(6+min(i+1, depth-1)), 2^(5+i); p=(i == 1 ? 0f0 : .5f0)) for i=depth-1:-1:1]...)
+  up_blocks = tuple([UNetUpBlock(2^(6+min(i+1, depth-1)), 2^(5+i); p=(i == 1 ? 0f0 : .5f0)) for i=1:depth-1]...)
 
   out_blocks = Chain(x -> leakyrelu.(x, 0.2f0), Conv((1, 1), 128=>labels; init=_random_normal), x -> tanh.(x))
 
@@ -64,36 +64,24 @@ function Unet(channels::Integer = 1, labels::Int = channels, depth::Integer=5)
 end
 
 function (u::Unet{D})(x::AbstractArray{T, 4}) where {D, T}
-  xcis = (u.init_conv_block(x),)
+  x0 = u.init_conv_block(x)
 
-  for d=1:D
-    xcis = (xcis..., u.conv_blocks[d](u.conv_down_blocks[d](xcis[d])))
+  if D>0
+    x0 = _unet(u, x0, Val(1))
   end
 
-  ux = u.up_blocks[1](xcis[D+1], xcis[D-1])
+  out = u.out_blocks(x0)
 
-  for d=2:D-1
-    ux = u.up_blocks[d](ux, xcis[D-d])
-  end
-
-  return u.out_blocks(ux)
+  return out
 end
 
-function Base.show(io::IO, u::Unet)
-  println(io, "UNet:")
-
-  for l in u.conv_down_blocks
-    println(io, "  ConvDown($(size(l[1].weight)[end-1]), $(size(l[1].weight)[end]))")
-  end
-
-  println(io, "\n")
-  for l in u.conv_blocks
-    println(io, "  UNetConvBlock($(size(l[1].weight)[end-1]), $(size(l[1].weight)[end]))")
-  end
-
-  println(io, "\n")
-  for l in u.up_blocks
-    l isa UNetUpBlock || continue
-    println(io, "  UNetUpBlock($(size(l.upsample[2].weight)[end]), $(size(l.upsample[2].weight)[end-1]))")
-  end
+function _unet(u::Unet{D}, x::AbstractArray{T, 4}, ::Val{d}) where {D, d, T}
+  xl = u.conv_down_blocks[d](x)
+  _next_level = _unet(u, xl, Val(d+1))
+  xu = u.up_blocks[d](_next_level, xl)
+  return u.conv_blocks[d](xu)
 end
+
+_unet(u::Unet{D}, x::AbstractArray{T, 4}, ::Val{D}) where {D, T} = x
+
+Base.show(io::IO, u::Unet) = println(io, "UNet: no display (TBD)")
