@@ -15,7 +15,4 @@ run_mode() = (global testing_seed = nothing)
 include("utils.jl")
 include("model.jl")
 
-# Legacy to make sure correct result
-include("legacy.jl")
-
 end # module
