@@ -39,16 +39,16 @@ end
 struct Unet{D}
   conv_down_blocks
   init_conv_block
-  conv_blocks
+  conv_blocks::NTuple{D, <:Conv}
   up_blocks
   out_blocks
+  func
 end
 
 @functor Unet
 
-Unet(conv_down_blocks, init_conv_block, conv_blocks, up_blocks, out_blocks) = Unet{length(conv_down_blocks)}(conv_down_blocks, init_conv_block, conv_blocks, up_blocks, out_blocks)
 
-function Unet(channels::Integer = 1, labels::Int = channels, depth::Integer=5; ndim=2)
+function Unet(channels::Integer = 1, labels::Int = channels, depth::Integer=5; ndim=2, pad_input=true)
   if depth < 3
     @warn "not recommended to use less than 3 levels"
   end
@@ -62,10 +62,21 @@ function Unet(channels::Integer = 1, labels::Int = channels, depth::Integer=5; n
 
   out_blocks = Chain(x -> leakyrelu.(x, 0.2f0), Conv(ntuple(_->1, ndim), 128=>labels; init=_random_normal), x -> tanh.(x))
 
-  return Unet{depth}(conv_down_blocks, init_conv_block, conv_blocks, up_blocks, out_blocks)
+  func = pad_input ? _padded_unet : _unet
+
+  return Unet{depth}(conv_down_blocks, init_conv_block, conv_blocks, up_blocks, out_blocks, func)
 end
 
-function (u::Unet{D})(x::AbstractArray{T, N}) where {D, T, N}
+
+(u::Unet{D})(x::AbstractArray{T, N}) where {D, T, N} = u.func(u, x)
+
+function _padded_unet(u::Unet{D}, x::AbstractArray{T, N}) where {D, T, N}
+  xp = padz_unet(x, D-1)
+  ux = _unet(u, xp)
+  return crop_unet(ux, size(x))
+end
+
+function _unet(u::Unet{D}, x::AbstractArray{T, N}) where {D, T, N}
   xcis = (u.init_conv_block(x),)
 
   for d=1:D
@@ -81,21 +92,3 @@ function (u::Unet{D})(x::AbstractArray{T, N}) where {D, T, N}
   return u.out_blocks(ux)
 end
 
-function Base.show(io::IO, u::Unet)
-  println(io, "UNet:")
-
-  for l in u.conv_down_blocks
-    println(io, "  ConvDown($(size(l[1].weight)[end-1]), $(size(l[1].weight)[end]))")
-  end
-
-  println(io, "\n")
-  for l in u.conv_blocks
-    println(io, "  UNetConvBlock($(size(l[1].weight)[end-1]), $(size(l[1].weight)[end]))")
-  end
-
-  println(io, "\n")
-  for l in u.up_blocks
-    l isa UNetUpBlock || continue
-    println(io, "  UNetUpBlock($(size(l.upsample[2].weight)[end]), $(size(l.upsample[2].weight)[end-1]))")
-  end
-end

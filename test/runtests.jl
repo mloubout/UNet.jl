@@ -18,17 +18,26 @@ end
 
 @testset "Variable Sizes" begin
 
-  u = Unet()
+  u = Unet(;pad_input=false)
   # test powers of 2 don't throw and return correct shape
   for s in (64, 128, 256)
     ip = rand(Float32, s, s, 1, 1)
     @test size(u(ip)) == size(ip)
   end
 
-  broken_ip = rand(Float32, 299, 299, 1, 1)
+  broken_ip = rand(Float32, 399, 399, 1, 1)
   @test_throws DimensionMismatch size(u(broken_ip)) == size(broken_ip)
 end
 
+
+@testset "Padding" begin
+    for D in [3, 4, 5]
+        u = Unet(1, 1, D)
+        x = randn(Float32, 73, 93, 1, 1)
+        xu = u(x)
+        @test size(xu) == size(x)
+    end
+end
 
 @testset "Gradient Tests" begin
   u = Unet()

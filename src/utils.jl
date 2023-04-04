@@ -1,3 +1,5 @@
+import Flux.ChainRulesCore: rrule, NoTangent
+
 export bce, loss_bce
 
 function _random_normal(shape...)
@@ -25,4 +27,37 @@ end
 function loss_bce(x, y)
   op = clamp.(u(x), 0.001f0, 1.f0)
   return mean(bce(op, y))
+end
+
+function padz_unet(x::AbstractArray{T, 4}, D::Integer) where T
+    n1, n2, n3, n4 = size(x)
+    p1 = mod(-n1, 2^D)
+    p2 = mod(-n2, 2^D)
+    px = fill!(similar(x, (n1+p1, n2+p2, n3, n4)), zero(T))
+    px[p1+1:end, p2+1:end, :, :] .= x
+    return px
+end
+
+function padz_unet(x::AbstractArray{T, 4}, N::NTuple{4, Integer}) where T
+    px = fill!(similar(x, N), zero(T))
+    c1, c2 = size(x)[1:2] .- N[1:2] .+ 1
+    px[c1:end, c2:end, :, :] .= x
+    return px
+end
+
+function crop_unet(x::AbstractArray{T, 4}, N::NTuple{4, Integer}) where T
+    c1, c2 = size(x)[1:2] .- N[1:2] .+ 1
+    return x[c1:end, c2:end, :, :]
+end
+
+function rrule(::typeof(padz_unet), x::DenseArray{T, 4}, D::Integer) where T
+    pz = padz_unet(x, D)
+    bck(dy) = (NoTangent(), crop_unet(dy, size(x)), NoTangent())
+    return pz, bck
+end
+
+function rrule(::typeof(crop_unet), x::DenseArray{T, 4}, N::NTuple{4, Integer}) where T
+    cz = crop_unet(x, N)
+    bck(dy) = (NoTangent(), padz_unet(dy, size(x)), NoTangent())
+    return cz, bck
 end
