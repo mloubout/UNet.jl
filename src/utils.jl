@@ -1,4 +1,4 @@
-import Flux.ChainRulesCore: rrule, NoTangent
+import ChainRulesCore: rrule, NoTangent
 
 export bce, loss_bce
 
