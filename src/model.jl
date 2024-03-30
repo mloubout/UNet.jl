@@ -58,7 +58,7 @@ function Unet(channels::Integer = 1, labels::Int = channels, depth::Integer=5)
 
   up_blocks = tuple([UNetUpBlock(2^(6+min(i+1, depth-1)), 2^(5+i); p=(i == 1 ? 0f0 : .5f0)) for i=depth-1:-1:1]...)
 
-  out_blocks = Chain(x -> leakyrelu.(x, 0.2f0), Conv((1, 1,1), 128=>labels; init=_random_normal), x -> tanh.(x))
+  out_blocks = Chain(x -> leakyrelu.(x, 0.2f0), Conv((1, 1,1), 128=>labels; init=_random_normal), x -> x)
 
   return Unet{depth}(conv_down_blocks, init_conv_block, conv_blocks, up_blocks, out_blocks)
 end
