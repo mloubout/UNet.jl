@@ -1,13 +1,17 @@
+function BatchNormWrap(out_ch::Integer)
+    Chain(x->expand_dims(x,2), BatchNorm(out_ch), x->squeeze(x))
+end
+
 function UNetConvBlock(in_chs::Integer, out_chs::Integer, kernel=3, activation=relu; ndim=2)
   kernel = ntuple(_ -> kernel, ndim)
   pad = div.(kernel, 2)
-  return Conv(kernel, in_chs=>out_chs, activation, pad=pad; init=_random_normal)
+  return Chain(Conv(kernel, in_chs=>out_chs, activation, pad=pad; init=_random_normal),BatchNormWrap(out_chs))
 end
 
 function ConvDown(in_chs::Integer, out_chs::Integer, kernel=4; ndim=2)
   kernel = ntuple(_ -> kernel, ndim)
   stride = ntuple(_ -> 2, ndim)
-  block = Chain(Conv(kernel, in_chs=>out_chs, pad=SamePad(); init=_random_normal), MaxPool(stride; pad=0))
+  block = Chain(Conv(kernel, in_chs=>out_chs, pad=SamePad(); init=_random_normal), MaxPool(stride; pad=0),BatchNormWrap(out_chs))
   return block
 end
 
@@ -39,7 +43,7 @@ end
 struct Unet{D}
   conv_down_blocks
   init_conv_block
-  conv_blocks::NTuple{D, <:Conv}
+  conv_blocks::NTuple{D, <:Chain}
   up_blocks
   out_blocks
   func
